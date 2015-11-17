@@ -1,14 +1,27 @@
 from flask import Flask, render_template, Response
 from flask_restful import Resource, Api
 import json
+from sqlalchemy import create_engine
 
 
 application = Flask(__name__)
 api = Api(application)
+DB_STRING = 'mysql+pymysql://%s:%s@%s:%s/%s' % ('user', 'password', 'projectdb.ckapg67klplg.us-west-1.rds.amazonaws.com', 3306, 'db1')
+engine = create_engine(DB_STRING, pool_recycle=3600)
+query = 'SELECT * FROM users'
+conn = engine.connect()
+r = conn.execute(query).cursor.fetchall()
+print(r)
 
 
 @application.route('/', methods=['GET'])
 def index():
+    DB_STRING = 'mysql+pymysql://%s:%s@%s:%s/%s' % ('user', 'password', 'projectdb.ckapg67klplg.us-west-1.rds.amazonaws.com', 3306, 'db1')
+    engine = create_engine(DB_STRING, pool_recycle=3600)
+    query = 'SELECT * FROM users'
+    conn = engine.connect()
+    r = conn.execute(query).cursor.fetchall()
+    print('123')
     return render_template('index.html')
 
 
