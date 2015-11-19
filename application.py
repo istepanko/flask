@@ -9,7 +9,7 @@ api = Api(application)
 application.debug = True
 
 
-DB_STRING = 'mysql+pymysql://%s:%s@%s:%s/%s' % ('user', 'password', 'projectdb.ckapg67klplg.us-west-1.rds.amazonaws.com', 3306, 'db1')
+DB_STRING = 'mysql+pymysql://%s:%s@%s:%s/%s' % ('user', 'password', 'projectdb.cv6b9gyk6jxg.us-west-1.rds.amazonaws.com', 3306, 'db1')
 engine = create_engine(DB_STRING, pool_recycle=3600)
 query = 'SELECT * FROM users'
 conn = engine.connect()
