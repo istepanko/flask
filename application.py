@@ -31,6 +31,7 @@ class User(Resource):
             user['uuid'] = row[0]
             user['email'] = row[1]
             user['firstname'] = row[2]
+            user['lastname'] = row[3]
             users['users'].append(user)
         return users, 200
 
