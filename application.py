@@ -25,12 +25,9 @@ class User(Resource):
         r = conn.execute(query).cursor.fetchall()
         users = dict()
         users['users'] = list()
-        user = {
-            'uuid': '',
-            'email': '',
-            'firstname': ''
-        }
+
         for row in r:
+            user = dict()
             user['uuid'] = row[0]
             user['email'] = row[1]
             user['firstname'] = row[2]
