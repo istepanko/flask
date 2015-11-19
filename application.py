@@ -25,8 +25,16 @@ class User(Resource):
         r = conn.execute(query).cursor.fetchall()
         users = dict()
         users['users'] = list()
+        user = {
+            'uuid': '',
+            'email': '',
+            'firstname': ''
+        }
         for row in r:
-            users['users'].append(row)
+            user['uuid'] = row[0]
+            user['email'] = row[1]
+            user['firstname'] = row[2]
+            users['users'].append(user)
         return users, 200
 
 api.add_resource(User, '/api/v1/users')
