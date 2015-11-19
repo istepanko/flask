@@ -23,8 +23,11 @@ class User(Resource):
         query = 'SELECT * FROM users'
         conn = engine.connect()
         r = conn.execute(query).cursor.fetchall()
-
-        return {'test':'test'}, 200
+        users = dict()
+        users['users'] = list()
+        for row in r:
+            users['users'].append(row)
+        return users, 200
 
 api.add_resource(User, '/api/v1/users')
 
