@@ -18,7 +18,7 @@ def index():
     return render_template('index.html')
 
 
-class User(Resource):
+class Users(Resource):
     def get(self):
         query = 'SELECT * FROM users'
         conn = engine.connect()
@@ -35,7 +35,24 @@ class User(Resource):
             users['users'].append(user)
         return users, 200
 
-api.add_resource(User, '/api/v1/users')
+
+class User(Resource):
+    def get(self, uuid):
+        query = 'SELECT * FROM users WHERE uuid = %s' % uuid
+        conn = engine.connect()
+        r = conn.execute(query).cursor.fetchall()
+        if r:
+            user = dict()
+            user['uuid'] = r[0][0]
+            user['email'] = r[0][1]
+            user['firstname'] = r[0][2]
+            user['lastname'] = r[0][3]
+            return user, 200
+        else:
+            return {'errorMessage': 'User not found.'}, 404
+
+api.add_resource(Users, '/api/v1/users')
+api.add_resource(User, '/api/v1/users/<uuid>')
 
 if __name__ == '__main__':
     application.run(host='0.0.0.0')
