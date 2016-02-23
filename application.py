@@ -2,6 +2,8 @@ from flask import Flask, render_template, Response
 from flask_restful import Resource, Api
 import json
 from sqlalchemy import create_engine
+import queries
+import constants
 
 
 application = Flask(__name__)
@@ -20,9 +22,8 @@ def index():
 
 class Users(Resource):
     def get(self):
-        query = 'SELECT * FROM users'
         conn = engine.connect()
-        r = conn.execute(query).cursor.fetchall()
+        r = conn.execute(queries.QUERY_SELECT_ALL_USERS).cursor.fetchall()
         users = dict()
         users['users'] = list()
 
@@ -38,9 +39,8 @@ class Users(Resource):
 
 class User(Resource):
     def get(self, uuid):
-        query = 'SELECT * FROM users WHERE uuid = %s' % uuid
         conn = engine.connect()
-        r = conn.execute(query).cursor.fetchall()
+        r = conn.execute(queries.QUERY_SELECT_USER_BY_UUID.format(uuid)).cursor.fetchall()
         if r:
             user = dict()
             user['uuid'] = r[0][0]
@@ -50,6 +50,26 @@ class User(Resource):
             return user, 200
         else:
             return {'errorMessage': 'User not found.'}, 404
+
+    def delete(self, uuid):
+        conn = engine.connect()
+        q = conn.execute(queries.QUERY_SELECT_USER_BY_UUID.format(uuid))
+        r = q.cursor.fetchall()
+        if not r:
+            json_body = json.dumps({'errorMessage': 'User not found.'})
+            response = Response(response=json_body, status=404)
+            return response
+        else:
+            #conn.execute(queries.QUERY_DELETE_USER_BY_UUID.format(uuid))
+            q = conn.execute(queries.QUERY_SELECT_USER_BY_UUID.format(uuid))
+            r = q.cursor.fetchall()
+            if not r:
+                response = Response(status=200)
+                return response
+            else:
+                json_body = json.dumps({'errorMessage': 'User not deleted, something went wrong.'})
+                response = Response(response=json_body, status=500)
+                return response
 
 api.add_resource(Users, '/api/v1/users')
 api.add_resource(User, '/api/v1/users/<uuid>')
