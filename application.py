@@ -60,7 +60,7 @@ class User(Resource):
             response = Response(response=json_body, status=404)
             return response
         else:
-            #conn.execute(queries.QUERY_DELETE_USER_BY_UUID.format(uuid))
+            conn.execute(queries.QUERY_DELETE_USER_BY_UUID.format(uuid))
             q = conn.execute(queries.QUERY_SELECT_USER_BY_UUID.format(uuid))
             r = q.cursor.fetchall()
             if not r:
