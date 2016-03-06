@@ -35,6 +35,8 @@ class Users(Resource):
             user['email'] = row[1]
             user['firstname'] = row[2]
             user['lastname'] = row[3]
+            user['password'] = row[4]
+            user['token'] = row[5]
             users['users'].append(user)
         return users, 200
 
