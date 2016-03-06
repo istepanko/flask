@@ -5,7 +5,7 @@ from flask_restful import Resource, Api, reqparse
 from sqlalchemy import create_engine
 import queries
 from flask import Flask, render_template, Response
-#from validate_email import validate_email
+from validate_email import validate_email
 
 application = Flask(__name__)
 api = Api(application)
