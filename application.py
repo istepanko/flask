@@ -14,7 +14,7 @@ application.debug = True
 
 DB_STRING = 'mysql+pymysql://%s:%s@%s:%s/%s' % ('user', 'password', 'projectdb.cv6b9gyk6jxg.us-west-1.rds.amazonaws.com', 3306, 'db1')
 engine = create_engine(DB_STRING, pool_recycle=3600)
-utils = Ut()
+utils = Ut()    # what's that?
 
 
 @application.route('/', methods=['GET'])
@@ -119,9 +119,63 @@ class User(Resource):
                 response = Response(response=json_body, status=500)
                 return response
 
+    def put(self, uuid):
+        parser = reqparse.RequestParser()
+        parser.add_argument('email', type=str, location='json')
+        parser.add_argument('firstname', type=str, location='json')
+        parser.add_argument('lastname', type=str, location='json')
+        parser.add_argument('password', type=str, location='json')
+        args = parser.parse_args(strict=True)
+
+        email = args['email']
+        if email is None:
+            json_body = json.dumps({'errorMessage': 'Email is required.'.format(email)})
+            response = Response(response=json_body, status=409)
+            return response
+        firstname = args['firstname']
+        lastname = args['lastname']
+        password = args['password']
+
+        conn = engine.connect()
+        a = conn.execute(queries.QUERY_SELECT_USER_BY_EMAIL.format(email)).cursor.fetchall()
+        b = conn.execute(queries.QUERY_SELECT_USER_BY_UUID.format(uuid)).cursor.fetchall()
+        if a:
+            json_body = json.dumps({'errorMessage': 'Email already exists.'})
+            response = Response(response=json_body, status=409)
+            return response
+        if b:
+            token = utils.generate_token()
+            conn.execute(queries.QUERY_UPDATE_USER.format(email, firstname, lastname, password, token, uuid))
+        else:
+            json_body = json.dumps({'errorMessage': 'User not found.'})
+            response = Response(response=json_body, status=404)
+            return response
+
+        c = conn.execute(queries.QUERY_SELECT_USER_BY_UUID.format(uuid)).cursor.fetchall()
+        if c and c != b:
+            user = dict()
+            user['uuid'] = c[0][0]
+            user['email'] = c[0][1]
+            user['firstname'] = c[0][2]
+            user['lastname'] = c[0][3]
+            response = Response(status=201)
+            return user, response
+        else:
+            json_body = json.dumps({'errorMessage': 'User not updated, something went wrong.'})
+            response = Response(response=json_body, status=500)
+            return response
+
+
 api.add_resource(Users, '/api/v1/users')
 api.add_resource(User, '/api/v1/users/<uuid>')
 
 
 if __name__ == '__main__':
     application.run(host='0.0.0.0')
+
+#PUT         # curl 'http://0.0.0.0:5000/api/v1/users/180e3768-e430-11e5-bb28-acbc32cf3ae5' -d '{"email": "ilya2.email@icloud.com"}' -H 'Content-Type: application/json' -XPUT -v
+#POST        # curl 'http://0.0.0.0:5000/api/v1/users' -d '{"email": "ilya.email@icloud.com", "firstname": "Ilya", "lastname": "Stepanko", "password": "testpass"}' -H 'Content-Type: application/json' -XPOST -v
+#GET ALL     # curl 'http://0.0.0.0:5000/api/v1/users' -v
+#GET BY UUID # curl 'http://0.0.0.0:5000/api/v1/users/180e3768-e430-11e5-bb28-acbc32cf3ae5' -v
+#DELETE      # curl 'http://0.0.0.0:5000/api/v1/users/7c2660e6-d9f0-11e5-86ea-a45e60d95013' -XDELETE -v
+
