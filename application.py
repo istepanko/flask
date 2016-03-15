@@ -127,43 +127,54 @@ class User(Resource):
         parser.add_argument('password', type=str, location='json')
         args = parser.parse_args(strict=True)
 
-        email = args['email']
-        if email is None:
-            json_body = json.dumps({'errorMessage': 'Email is required.'.format(email)})
-            response = Response(response=json_body, status=409)
-            return response
-        firstname = args['firstname']
-        lastname = args['lastname']
-        password = args['password']
-
         conn = engine.connect()
-        a = conn.execute(queries.QUERY_SELECT_USER_BY_EMAIL.format(email)).cursor.fetchall()
-        b = conn.execute(queries.QUERY_SELECT_USER_BY_UUID.format(uuid)).cursor.fetchall()
-        if a:
-            json_body = json.dumps({'errorMessage': 'Email already exists.'})
-            response = Response(response=json_body, status=409)
-            return response
-        if b:
-            token = utils.generate_token()
-            conn.execute(queries.QUERY_UPDATE_USER.format(email, firstname, lastname, password, token, uuid))
-        else:
+        q = conn.execute(queries.QUERY_SELECT_USER_BY_UUID.format(uuid)).cursor.fetchall()
+        if not q:
             json_body = json.dumps({'errorMessage': 'User not found.'})
             response = Response(response=json_body, status=404)
             return response
 
-        c = conn.execute(queries.QUERY_SELECT_USER_BY_UUID.format(uuid)).cursor.fetchall()
-        if c and c != b:
-            user = dict()
-            user['uuid'] = c[0][0]
-            user['email'] = c[0][1]
-            user['firstname'] = c[0][2]
-            user['lastname'] = c[0][3]
-            response = Response(status=201)
-            return user, response
+        if args['email']:
+            r = conn.execute(queries.QUERY_SELECT_USER_BY_EMAIL.format(args['email'])).cursor.fetchall()
+            email = args['email']
+            if r and r[0][0] != uuid:
+                json_body = json.dumps({'errorMessage': 'Email already exists.'})
+                response = Response(response=json_body, status=409)
+                return response
         else:
-            json_body = json.dumps({'errorMessage': 'User not updated, something went wrong.'})
-            response = Response(response=json_body, status=500)
-            return response
+            email = q[0][1]
+
+        if args['firstname']:
+            firstname = args['firstname']
+        else:
+            firstname = q[0][2]
+
+        if args['lastname']:
+            lastname = args['lastname']
+        else:
+            lastname = q[0][3]
+
+        if args['password']:
+            password = args['password']
+            res = utils.pass_check(password)
+            print(res)
+            if res:
+                json_body = json.dumps({'errorMessage': res})
+                response = Response(response=json_body, status=400)
+                return response
+        else:
+            password = q[0][4]
+
+        conn.execute(queries.QUERY_UPDATE_USER.format(email, firstname, lastname, password, uuid))
+
+        q = conn.execute(queries.QUERY_SELECT_USER_BY_UUID.format(uuid)).cursor.fetchall()
+        user = dict()
+        user['email'] = q[0][1]
+        user['firstname'] = q[0][2]
+        user['lastname'] = q[0][3]
+        json_body = json.dumps(user)
+        response = Response(response=json_body, status=200)
+        return response
 
 
 api.add_resource(Users, '/api/v1/users')
