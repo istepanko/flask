@@ -133,7 +133,7 @@ class User(Resource):
             json_body = json.dumps({'errorMessage': 'User not found.'})
             response = Response(response=json_body, status=404)
             return response
-
+        token = q[0][5]
         if args['email']:
             r = conn.execute(queries.QUERY_SELECT_USER_BY_EMAIL.format(args['email'])).cursor.fetchall()
             email = args['email']
@@ -141,6 +141,8 @@ class User(Resource):
                 json_body = json.dumps({'errorMessage': 'Email already exists.'})
                 response = Response(response=json_body, status=409)
                 return response
+            if email != q[0][1]:
+                token = utils.generate_token()
         else:
             email = q[0][1]
 
@@ -157,15 +159,16 @@ class User(Resource):
         if args['password']:
             password = args['password']
             res = utils.pass_check(password)
-            print(res)
             if res:
                 json_body = json.dumps({'errorMessage': res})
                 response = Response(response=json_body, status=400)
                 return response
+            if password != q[0][4]:
+                token = utils.generate_token()
         else:
             password = q[0][4]
 
-        conn.execute(queries.QUERY_UPDATE_USER.format(email, firstname, lastname, password, uuid))
+        conn.execute(queries.QUERY_UPDATE_USER.format(email, firstname, lastname, password, token, uuid))
 
         q = conn.execute(queries.QUERY_SELECT_USER_BY_UUID.format(uuid)).cursor.fetchall()
         user = dict()
