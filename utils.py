@@ -1,9 +1,7 @@
 import hashlib
 import os
 import chardet
-from functools import wraps
-from flask import request, Response
-
+import queries
 
 
 class Utils:
@@ -39,19 +37,9 @@ class Utils:
         return err
 
     @staticmethod
-    def check_auth(login, password):  #This function is called to check if a username / password combination is valid.
-        return login == 'admin' and password == 'secret'
-
-    @staticmethod
-    def authenticate():   #Sends a 401 response that enables basic auth
-        return Response("Could not verify your access level for that URL.\n You have to login with proper credentials", 401, {'WWW-Authenticate': 'Token realm="Authentication Required"'})
-
-    @staticmethod
-    def requires_auth(f):
-        @wraps(f)
-        def decorated(*args, **kwargs):
-            auth = request.authorization
-            if not auth or not check_auth(auth.username, auth.password):
-                return authenticate()
-            return f(*args, **kwargs)
-        return decorated
+    def authenticate(token, conn):
+        q = conn.execute(queries.QUERY_SELECT_USER_BY_TOKEN.format(token)).cursor.fetchall()
+        if q:
+            return q[0][6]
+        else:
+            return False

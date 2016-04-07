@@ -25,10 +25,27 @@ def index():
 
 class Users(Resource):
     def get(self):
+        parser = reqparse.RequestParser()
+        parser.add_argument('authorization', type=str, location='headers')
+        args = parser.parse_args(strict=True)
+        for key in args:
+            if args[key] is None:
+                json_body = json.dumps({'errorMessage': '{0} is required.'.format(key)})
+                response = Response(response=json_body, status=400)
+                return response
+
         conn = engine.connect()
-        r = conn.execute(queries.QUERY_SELECT_ALL_USERS).cursor.fetchall()
+        role = utils.authenticate(args['authorization'], conn)
         users = dict()
         users['users'] = list()
+        if not role:
+            json_body = json.dumps({'errorMessage': 'Invalid token.'})
+            response = Response(response=json_body, status=401)
+            return response
+        elif role != 'admin':
+            r = conn.execute(queries.QUERY_SELECT_USER_BY_TOKEN.format(args['authorization'])).cursor.fetchall()
+        else:
+            r = conn.execute(queries.QUERY_SELECT_ALL_USERS).cursor.fetchall()
 
         for row in r:
             user = dict()
@@ -38,6 +55,7 @@ class Users(Resource):
             user['lastname'] = row[3]
             user['password'] = row[4]
             user['token'] = row[5]
+            user['role'] = row[6]
             users['users'].append(user)
         return users, 200
 
@@ -47,13 +65,24 @@ class Users(Resource):
         parser.add_argument('firstname', type=str, location='json')
         parser.add_argument('lastname', type=str, location='json')
         parser.add_argument('password', type=str, location='json')
+        parser.add_argument('role', type=str, location='json')
+        parser.add_argument('authorization', type=str, location='headers')
         args = parser.parse_args(strict=True)
         for key in args:
             if args[key] is None:
                 json_body = json.dumps({'errorMessage': '{0} is required.'.format(key)})
                 response = Response(response=json_body, status=400)
                 return response
-
+        conn = engine.connect()
+        role = utils.authenticate(args['authorization'], conn)
+        if not role:
+            json_body = json.dumps({'errorMessage': 'Invalid token.'})
+            response = Response(response=json_body, status=401)
+            return response
+        elif role != 'admin':
+            json_body = json.dumps({'errorMessage': 'Not enough permissions.'})
+            response = Response(response=json_body, status=403)
+            return response
         email = args['email']
         if not validate_email(email):
             json_body = json.dumps({'errorMessage': 'Email is not valid.'})
@@ -63,8 +92,8 @@ class Users(Resource):
         firstname = args['firstname']
         lastname = args['lastname']
         password = args['password']
+        role = args['role']
 
-        conn = engine.connect()
         r = conn.execute(queries.QUERY_SELECT_USER_BY_EMAIL.format(email)).cursor.fetchall()
         if r:
             json_body = json.dumps({'errorMessage': 'Email already exists.'})
@@ -73,7 +102,7 @@ class Users(Resource):
 
         new_uuid = uuid.uuid1()
         token = utils.generate_token()
-        conn.execute(queries.QUERY_INSERT_USER.format(new_uuid, email, firstname, lastname, password, token))
+        conn.execute(queries.QUERY_INSERT_USER.format(new_uuid, email, firstname, lastname, password, token, role))
         r = conn.execute(queries.QUERY_SELECT_USER_BY_UUID.format(new_uuid)).cursor.fetchall()
         if r:
             response = Response(status=201)
@@ -198,7 +227,7 @@ class Login(Resource):
             if q[0][4] == args['password']:
                 token = utils.generate_token()
                 conn.execute(queries.QUERY_UPDATE_TOKEN_BY_EMAIL.format(token, args['email']))
-                json_body = json.dumps({'token': token})
+                json_body = json.dumps({'role': q[0][6], 'token': token})
                 response = Response(response=json_body, status=200)
                 return response
         json_body = json.dumps({'errorMessage': 'Invalid credentials.'})
