@@ -5,7 +5,6 @@ from flask_restful import Resource, Api, reqparse
 from sqlalchemy import create_engine
 import queries
 from flask import Flask, render_template, Response
-from validate_email import validate_email
 
 application = Flask(__name__)
 api = Api(application)
@@ -180,9 +179,34 @@ class User(Resource):
         return response
 
 
+class Login(Resource):
+    def post(self):
+        parser = reqparse.RequestParser()
+        parser.add_argument('email', type=str, location='json')
+        parser.add_argument('password', type=str, location='json')
+        args = parser.parse_args(strict=True)
+        for key in args:
+            if args[key] is None:
+                json_body = json.dumps({'errorMessage': '{0} is required.'.format(key)})
+                response = Response(response=json_body, status=400)
+                return response
+        conn = engine.connect()
+        q = conn.execute(queries.QUERY_SELECT_USER_BY_EMAIL.format(args['email'])).cursor.fetchall()
+        if q:
+            if q[0][4] == args['password']:
+                token = utils.generate_token()
+                conn.execute(queries.QUERY_UPDATE_TOKEN_BY_EMAIL.format(token, args['email']))
+                json_body = json.dumps({'token': token})
+                response = Response(response=json_body, status=200)
+                return response
+        json_body = json.dumps({'errorMessage': 'Invalid credentials.'})
+        response = Response(response=json_body, status=401)
+        return response
+
+
 api.add_resource(Users, '/api/v1/users')
 api.add_resource(User, '/api/v1/users/<uuid>')
-
+api.add_resource(Login, '/api/v1/login')
 
 if __name__ == '__main__':
     application.run(host='0.0.0.0')
