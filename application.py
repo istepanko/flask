@@ -5,25 +5,18 @@ from flask_restful import Resource, Api, reqparse
 from sqlalchemy import create_engine
 import queries
 from flask import Flask, render_template, Response
-<<<<<<< HEAD
-=======
 from validate_email import validate_email
-#from flask.ext.httpauth import HTTPBasicAuth
-from functools import wraps
-#from flask_httpauth import HTTPTokenAuth
 
-
->>>>>>> origin/master
 
 application = Flask(__name__)
 api = Api(application)
 application.debug = True
-#auth = HTTPTokenAuth(scheme='Token')
 
 
 DB_STRING = 'mysql+pymysql://%s:%s@%s:%s/%s' % ('user', 'password', 'projectdb.cv6b9gyk6jxg.us-west-1.rds.amazonaws.com', 3306, 'db1')
 engine = create_engine(DB_STRING, pool_recycle=3600)
-utils = Ut()    # what's that?
+utils = Ut()
+
 
 @application.route('/', methods=['GET'])
 def index():
