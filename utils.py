@@ -1,6 +1,9 @@
 import hashlib
 import os
 import chardet
+from functools import wraps
+from flask import request, Response
+
 
 
 class Utils:
@@ -18,7 +21,7 @@ class Utils:
         encoding = chardet.detect(password)
         err = None
         if encoding['encoding'] != 'ascii':
-            err = 'Your password contains non ascii-encoded characters.'
+            err = 'Your password contains non-ascii encoded characters.'
         else:
             if password.isalnum():
                 valid = any(a.isalpha() for a in password) and any(b.isdigit() for b in password) and any(
@@ -34,3 +37,21 @@ class Utils:
             else:
                 err = 'Your password shouldn\'t contain special characters.'
         return err
+
+    @staticmethod
+    def check_auth(login, password):  #This function is called to check if a username / password combination is valid.
+        return login == 'admin' and password == 'secret'
+
+    @staticmethod
+    def authenticate():   #Sends a 401 response that enables basic auth
+        return Response("Could not verify your access level for that URL.\n You have to login with proper credentials", 401, {'WWW-Authenticate': 'Token realm="Authentication Required"'})
+
+    @staticmethod
+    def requires_auth(f):
+        @wraps(f)
+        def decorated(*args, **kwargs):
+            auth = request.authorization
+            if not auth or not check_auth(auth.username, auth.password):
+                return authenticate()
+            return f(*args, **kwargs)
+        return decorated
