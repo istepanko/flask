@@ -194,13 +194,9 @@ class User(Resource):
             token = q[0][5]
             if args['email']:
                 email = args['email']
-                if not validate_email(email):
-                    json_body = json.dumps({'errorMessage': 'Email is not valid.'})
-                    response = Response(response=json_body, status=400)
-                    return response
                 conn = engine.connect()
-                r = conn.execute(queries.QUERY_SELECT_USER_BY_EMAIL.format(args['email'])).cursor.fetchall()
-                if r and r[0][0] != uuid:
+                b = conn.execute(queries.QUERY_SELECT_USER_BY_EMAIL.format(email)).cursor.fetchall()
+                if b and b[0][0] != uuid:
                     json_body = json.dumps({'errorMessage': 'Email already exists.'})
                     response = Response(response=json_body, status=409)
                     return response
@@ -241,27 +237,29 @@ class User(Resource):
             else:
                 role = q[0][6]
 
+            conn = engine.connect()
+            conn.execute(queries.QUERY_UPDATE_USER.format(email, firstname, lastname, password, token, role, uuid))
+            a = conn.execute(queries.QUERY_SELECT_USER_BY_UUID.format(uuid)).cursor.fetchall()
+            if a:
+                user = dict()
+                user['email'] = a[0][1]
+                user['firstname'] = a[0][2]
+                user['lastname'] = a[0][3]
+                user['password'] = a[0][4]
+                user['authorization'] = a[0][5]
+                user['role'] = a[0][6]
+                return user, 200
+            else:
+                json_body = json.dumps({'errorMessage': 'User not updated.'})
+                response = Response(response=json_body, status=404)
+                return response
+
         else:
             json_body = json.dumps({'errorMessage': 'Not enough permissions.'})
             response = Response(response=json_body, status=403)
             return response
 
-        conn.execute(queries.QUERY_UPDATE_USER.format(email, firstname, lastname, password, token, role, uuid))
 
-        q = conn.execute(queries.QUERY_SELECT_USER_BY_UUID.format(uuid)).cursor.fetchall()
-
-        user = dict()
-        user['email'] = q[0][1]
-        user['firstname'] = q[0][2]
-        user['lastname'] = q[0][3]
-        user['password'] = q[0][4]
-        user['role'] = q[0][6]
-        response = Response(status=201)
-        return user, response
-    # else:
-        #     json_body = json.dumps({'errorMessage': 'User not updated, something went wrong.'})
-        #     response = Response(response=json_body, status=500)
-        #     return response
 
 class Login(Resource):
     def post(self):
