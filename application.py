@@ -8,6 +8,9 @@ from flask import Flask, render_template, Response
 from validate_email import validate_email
 
 
+import chardet
+
+
 application = Flask(__name__)
 api = Api(application)
 application.debug = True
@@ -23,7 +26,7 @@ def index():
     return render_template('index.html')
 
 
-class Users(Resource):
+class Users(Resource):    #What means Resource imported from flask_restful?
     def get(self):
         parser = reqparse.RequestParser()
         parser.add_argument('authorization', type=str, location='headers')
@@ -93,6 +96,10 @@ class Users(Resource):
         lastname = args['lastname']
         password = args['password']
         role = args['role']
+        if not Ut.validate_role(role):
+            json_body = json.dumps({'errorMessage': 'Role can be Admin or Regular. Please provide correct role'})
+            response = Response(response=json_body, status=403)
+            return response
 
         r = conn.execute(queries.QUERY_SELECT_USER_BY_EMAIL.format(email)).cursor.fetchall()
         if r:
@@ -101,7 +108,7 @@ class Users(Resource):
             return response
 
         new_uuid = uuid.uuid1()
-        token = utils.generate_token()
+        token = Ut.generate_token()
         conn.execute(queries.QUERY_INSERT_USER.format(new_uuid, email, firstname, lastname, password, token, role))
         r = conn.execute(queries.QUERY_SELECT_USER_BY_UUID.format(new_uuid)).cursor.fetchall()
         if r:
@@ -155,60 +162,106 @@ class User(Resource):
         parser.add_argument('firstname', type=str, location='json')
         parser.add_argument('lastname', type=str, location='json')
         parser.add_argument('password', type=str, location='json')
+        parser.add_argument('role', type=str, location='json')
+        parser.add_argument('authorization', type=str, location='headers')
         args = parser.parse_args(strict=True)
 
+        if args['authorization'] is None:
+            json_body = json.dumps({'errorMessage': '{0} is required.'.format('authorization')})
+            response = Response(response=json_body, status=400)
+            return response
+
+        if args['email']:
+            if not validate_email(args['email']):
+                json_body = json.dumps({'errorMessage': 'Email is not valid.'})
+                response = Response(response=json_body, status=400)
+                return response
+
         conn = engine.connect()
+        r = utils.authenticate(args['authorization'], conn)
+        if not r:
+            json_body = json.dumps({'errorMessage': 'Invalid token.'})
+            response = Response(response=json_body, status=401)
+            return response
+
         q = conn.execute(queries.QUERY_SELECT_USER_BY_UUID.format(uuid)).cursor.fetchall()
         if not q:
             json_body = json.dumps({'errorMessage': 'User not found.'})
             response = Response(response=json_body, status=404)
             return response
-        token = q[0][5]
-        if args['email']:
-            r = conn.execute(queries.QUERY_SELECT_USER_BY_EMAIL.format(args['email'])).cursor.fetchall()
-            email = args['email']
-            if r and r[0][0] != uuid:
-                json_body = json.dumps({'errorMessage': 'Email already exists.'})
-                response = Response(response=json_body, status=409)
-                return response
-            if email != q[0][1]:
-                token = utils.generate_token()
-        else:
-            email = q[0][1]
 
-        if args['firstname']:
-            firstname = args['firstname']
-        else:
-            firstname = q[0][2]
+        if r == 'admin' or args['authorization'] == q[0][5]:
+            token = q[0][5]
+            if args['email']:
+                email = args['email']
+                if not validate_email(email):
+                    json_body = json.dumps({'errorMessage': 'Email is not valid.'})
+                    response = Response(response=json_body, status=400)
+                    return response
+                conn = engine.connect()
+                r = conn.execute(queries.QUERY_SELECT_USER_BY_EMAIL.format(args['email'])).cursor.fetchall()
+                if r and r[0][0] != uuid:
+                    json_body = json.dumps({'errorMessage': 'Email already exists.'})
+                    response = Response(response=json_body, status=409)
+                    return response
+                if email != q[0][1]:
+                    token = utils.generate_token()
+            else:
+                email = q[0][1]
 
-        if args['lastname']:
-            lastname = args['lastname']
-        else:
-            lastname = q[0][3]
+            if args['firstname']:
+                firstname = args['firstname']
+            else:
+                firstname = q[0][2]
 
-        if args['password']:
-            password = args['password']
-            res = utils.pass_check(password)
-            if res:
-                json_body = json.dumps({'errorMessage': res})
-                response = Response(response=json_body, status=400)
-                return response
-            if password != q[0][4]:
-                token = utils.generate_token()
-        else:
-            password = q[0][4]
+            if args['lastname']:
+                lastname = args['lastname']
+            else:
+                lastname = q[0][3]
 
-        conn.execute(queries.QUERY_UPDATE_USER.format(email, firstname, lastname, password, token, uuid))
+            if args['password']:
+                password = args['password']
+                err = utils.pass_check(password)
+                if err:
+                    json_body = json.dumps({'errorMessage': err})
+                    response = Response(response=json_body, status=400)
+                    return response
+                if password != q[0][4]:
+                    token = utils.generate_token()
+            else:
+                password = q[0][4]
+
+            if args['role']:
+                if not Ut.validate_role(args['role']):
+                    json_body = json.dumps({'errorMessage': 'Role can be Admin or Regular. Please provide correct role'})
+                    response = Response(response=json_body, status=403)
+                    return response
+                else:
+                    role = args['role']
+            else:
+                role = q[0][6]
+
+        else:
+            json_body = json.dumps({'errorMessage': 'Not enough permissions.'})
+            response = Response(response=json_body, status=403)
+            return response
+
+        conn.execute(queries.QUERY_UPDATE_USER.format(email, firstname, lastname, password, token, role, uuid))
 
         q = conn.execute(queries.QUERY_SELECT_USER_BY_UUID.format(uuid)).cursor.fetchall()
+
         user = dict()
         user['email'] = q[0][1]
         user['firstname'] = q[0][2]
         user['lastname'] = q[0][3]
-        json_body = json.dumps(user)
-        response = Response(response=json_body, status=200)
-        return response
-
+        user['password'] = q[0][4]
+        user['role'] = q[0][6]
+        response = Response(status=201)
+        return user, response
+    # else:
+        #     json_body = json.dumps({'errorMessage': 'User not updated, something went wrong.'})
+        #     response = Response(response=json_body, status=500)
+        #     return response
 
 class Login(Resource):
     def post(self):
@@ -242,11 +295,10 @@ api.add_resource(Login, '/api/v1/login')
 if __name__ == '__main__':
     application.run(host='0.0.0.0')
 
-#PUT         # curl 'http://0.0.0.0:5000/api/v1/users/180e3768-e430-11e5-bb28-acbc32cf3ae5' -d '{"email": "ilya2.email@icloud.com"}' -H 'Content-Type: application/json' -XPUT -v
-#POST        # curl 'http://0.0.0.0:5000/api/v1/users' -d '{"email": "ilya.email@icloud.com", "firstname": "Ilya", "lastname": "Stepanko", "password": "testpass"}' -H 'Content-Type: application/json' -XPOST -v
-#GET ALL     # curl 'http://0.0.0.0:5000/api/v1/users' -v
-#GET BY UUID # curl 'http://0.0.0.0:5000/api/v1/users/180e3768-e430-11e5-bb28-acbc32cf3ae5' -v
-#DELETE      # curl 'http://0.0.0.0:5000/api/v1/users/7c2660e6-d9f0-11e5-86ea-a45e60d95013' -XDELETE -v
+#PUT          curl 'http://0.0.0.0:5000/api/v1/users/180e3768-e430-11e5-bb28-acbc32cf3ae5' -d '{"email": "ilya2.email@icloud.com"}' -H 'Content-Type: application/json' -XPUT -v
+#POST         curl 'http://0.0.0.0:5000/api/v1/users' -d '{"email": "ilya.email12345@icloud.com", "firstname": "Ilya", "lastname": "Stepanko", "password": "tttestpass", "role": "regular"}' -H 'Content-Type: application/json' -H 'authorization: e0eb3604f0ec878c636d7fb282bda6676737ff11' -XPOST -v
+#GET BY UUID  curl 'http://0.0.0.0:5000/api/v1/users/180e3768-e430-11e5-bb28-acbc32cf3ae5' -v
+#DELETE       curl 'http://0.0.0.0:5000/api/v1/users/7c2660e6-d9f0-11e5-86ea-a45e60d95013' -XDELETE -v
+#GET ALL      curl 'http://0.0.0.0:5000/api/v1/users' -v
 
-
-#GET ALL     # curl -H 'X-Auth-Token: <Token ID>' http://0.0.0.0:5000/api/v1/users -v
+#GET ALL      curl -H 'authorization: 4f659f9b7ec2072bd8166fb936d5aab6ecec92c1' 'http://0.0.0.0:5000/api/v1/users'

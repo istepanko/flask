@@ -33,7 +33,7 @@ class Utils:
                 else:
                     err = 'Your password should be from 8 to 12 characters.'
             else:
-                err = 'Your password shouldn\'t contain special characters.'
+                err = 'Your password should not contain special characters.'
         return err
 
     @staticmethod
@@ -41,5 +41,12 @@ class Utils:
         q = conn.execute(queries.QUERY_SELECT_USER_BY_TOKEN.format(token)).cursor.fetchall()
         if q:
             return q[0][6]
+        else:
+            return False
+
+    @staticmethod
+    def validate_role(role):
+        if role == "admin" or role == "regular":
+            return True
         else:
             return False
