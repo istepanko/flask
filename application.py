@@ -128,7 +128,7 @@ class User(Resource):
         for key in args:
             if args[key] is None:
                 json_body = json.dumps({'errorMessage': '{0} is required.'.format(key)})
-                response = Response(response=json_body, status=400)
+                response = Response(response=json_body, status=401)
                 return response
 
         conn = engine.connect()
@@ -165,50 +165,13 @@ class User(Resource):
         for key in args:
             if args[key] is None:
                 json_body = json.dumps({'errorMessage': '{0} is required.'.format(key)})
-                response = Response(response=json_body, status=400)
+                response = Response(response=json_body, status=401)
                 return response
 
         conn = engine.connect()
-        q = conn.execute(queries.QUERY_SELECT_USER_BY_UUID.format(uuid)).cursor.fetchall()
         role = utils.authenticate(args['authorization'], conn)
+
         if not role:
-            json_body = json.dumps({'errorMessage': 'Invalid token.'})
-            response = Response(response=json_body, status=401)
-            return response
-        elif role == 'admin' or args['authorization'] == q[0][5]:
-            if not q:
-                json_body = json.dumps({'errorMessage': 'User not found.'})
-                response = Response(response=json_body, status=404)
-                return response
-            else:
-                conn.execute(queries.QUERY_DELETE_USER_BY_UUID.format(uuid))
-                q = conn.execute(queries.QUERY_SELECT_USER_BY_UUID.format(uuid)).cursor.fetchall()
-                if not q:
-                    response = Response(status=200)
-                    return response
-                else:
-                    json_body = json.dumps({'errorMessage': 'User not deleted, something went wrong.'})
-                    response = Response(response=json_body, status=500)
-                    return response
-
-    def put(self, uuid):
-        parser = reqparse.RequestParser()
-        parser.add_argument('email', type=str, location='json')
-        parser.add_argument('firstname', type=str, location='json')
-        parser.add_argument('lastname', type=str, location='json')
-        parser.add_argument('password', type=str, location='json')
-        parser.add_argument('role', type=str, location='json')
-        parser.add_argument('authorization', type=str, location='headers')
-        args = parser.parse_args(strict=True)
-
-        if args['authorization'] is None:
-            json_body = json.dumps({'errorMessage': '{0} is required.'.format('authorization')})
-            response = Response(response=json_body, status=400)
-            return response
-
-        conn = engine.connect()
-        r = utils.authenticate(args['authorization'], conn)
-        if not r:
             json_body = json.dumps({'errorMessage': 'Invalid token.'})
             response = Response(response=json_body, status=401)
             return response
@@ -219,15 +182,65 @@ class User(Resource):
             response = Response(response=json_body, status=404)
             return response
 
-        if r == 'admin' or args['authorization'] == q[0][5]:
+        elif role == 'admin' or args['authorization'] == q[0][5]:
+            conn.execute(queries.QUERY_DELETE_USER_BY_UUID.format(uuid))
+            q = conn.execute(queries.QUERY_SELECT_USER_BY_UUID.format(uuid)).cursor.fetchall()
+            if not q:
+                response = Response(status=200)
+                return response
+            else:
+                json_body = json.dumps({'errorMessage': 'User not deleted, something went wrong.'})
+                response = Response(response=json_body, status=500)
+                return response
+
+        else:
+            json_body = json.dumps({'errorMessage': 'You do not have enough permissions.'})
+            response = Response(response=json_body, status=403)
+            return response
+
+    def put(self, uuid):
+        parser = reqparse.RequestParser()
+        parser.add_argument('content-type', type=str, location='headers')
+        parser.add_argument('email', type=str, location='json')
+        parser.add_argument('firstname', type=str, location='json')
+        parser.add_argument('lastname', type=str, location='json')
+        parser.add_argument('password', type=str, location='json')
+        parser.add_argument('role', type=str, location='json')
+        parser.add_argument('authorization', type=str, location='headers')
+        args = parser.parse_args(strict=False)
+        print(args)
+        if args['authorization'] is None:
+            json_body = json.dumps({'errorMessage': '{0} is required.'.format('authorization')})
+            response = Response(response=json_body, status=400)
+            return response
+        if args['content-type'] and args['content-type'] != 'application/json':
+            json_body = json.dumps({'errorMessage': 'Unsupported Media Type.'})
+            response = Response(response=json_body, status=415)
+            return response
+
+        conn = engine.connect()
+        role = utils.authenticate(args['authorization'], conn)
+        if not role:
+            json_body = json.dumps({'errorMessage': 'Invalid token.'})
+            response = Response(response=json_body, status=401)
+            return response
+
+        q = conn.execute(queries.QUERY_SELECT_USER_BY_UUID.format(uuid)).cursor.fetchall()
+        if not q:
+            json_body = json.dumps({'errorMessage': 'User not found.'})
+            response = Response(response=json_body, status=404)
+            return response
+
+        if role == 'admin' or args['authorization'] == q[0][5]:
             token = q[0][5]
+            print(args)
             if args['email']:
+                print('123')
                 email = args['email']
                 if not validate_email(email):
                     json_body = json.dumps({'errorMessage': 'Email is not valid.'})
                     response = Response(response=json_body, status=400)
                     return response
-                conn = engine.connect()
                 b = conn.execute(queries.QUERY_SELECT_USER_BY_EMAIL.format(email)).cursor.fetchall()
                 if b and b[0][0] != uuid:
                     json_body = json.dumps({'errorMessage': 'Email already exists.'})
@@ -261,16 +274,21 @@ class User(Resource):
                 password = q[0][4]
 
             if args['role']:
-                if not Ut.validate_role(args['role']):
-                    json_body = json.dumps({'errorMessage': 'Role can be Admin or Regular. Please provide correct role'})
-                    response = Response(response=json_body, status=403)
-                    return response
+                if role == 'admin':
+                    if not Ut.validate_role(args['role']):
+                        json_body = json.dumps({'errorMessage': 'Role can be Admin or Regular. '
+                                                                'Please provide correct role.'})
+                        response = Response(response=json_body, status=400)
+                        return response
+                    else:
+                        role = args['role'].lower()
                 else:
-                    role = args['role']
+                    json_body = json.dumps({'errorMessage': 'You can not change your role'})
+                    response = Response(response=json_body, status=400)
+                    return response
             else:
                 role = q[0][6]
 
-            conn = engine.connect()
             conn.execute(queries.QUERY_UPDATE_USER.format(email, firstname, lastname, password, token, role, uuid))
             a = conn.execute(queries.QUERY_SELECT_USER_BY_UUID.format(uuid)).cursor.fetchall()
             if a:
@@ -278,20 +296,19 @@ class User(Resource):
                 user['email'] = a[0][1]
                 user['firstname'] = a[0][2]
                 user['lastname'] = a[0][3]
-                user['password'] = a[0][4]
-                user['authorization'] = a[0][5]
                 user['role'] = a[0][6]
-                return user, 200
+                json_body = json.dumps(user)
+                response = Response(response=json_body, status=200, content_type='application/json')
+                return response
             else:
-                json_body = json.dumps({'errorMessage': 'User not updated.'})
-                response = Response(response=json_body, status=404)
+                json_body = json.dumps({'errorMessage': 'Something went wrong, contact system administrator.'})
+                response = Response(response=json_body, status=500)
                 return response
 
         else:
             json_body = json.dumps({'errorMessage': 'Not enough permissions.'})
             response = Response(response=json_body, status=403)
             return response
-
 
 
 class Login(Resource):
